@@ -33,23 +33,25 @@ var (
 	ssidRE    = regexp.MustCompile(`SSID:\s+(.*)`)
 	bitrateRE = regexp.MustCompile(`tx bitrate:\s+(\d+)`)
 	signalRE  = regexp.MustCompile(`signal:\s+(-\d+)`)
+	ipRE      = regexp.MustCompile(`inet\s+([0-9.]+)`)
 	amixerRE  = regexp.MustCompile(`\[(\d+)%]\s*\[(\w+)]`)
 	xconn     *xgb.Conn
 	xroot     xproto.Window
 )
 
-var WifiFmt = func(dev, ssid string, bitrate, signal int, up bool) string {
+var WifiFmt = func(dev, ssid string, bitrate, signal int, up bool, ip string) string {
 	if !up {
 		return ""
 	}
-	return fmt.Sprintf("ω%s/%d/%d", ssid, bitrate, signal)
+	return fmt.Sprintf("%s %ddBm %s", ssid, signal, ip)
 }
 
-var WiredFmt = func(dev string, speed int, up bool) string {
+var WiredFmt = func(dev string, speed int, up bool, ip string) string {
 	if !up {
 		return ""
 	}
-	return "ε" + strconv.Itoa(speed)
+//	return "ε" + strconv.Itoa(speed)
+	return ip
 }
 
 var NetFmt = func(devs []string) string {
@@ -57,11 +59,11 @@ var NetFmt = func(devs []string) string {
 }
 
 var BatteryDevFmt = func(pct int, state string) string {
-	return strconv.Itoa(pct) + map[string]string{"Charging": "+", "Discharging": "-"}[state]
+	return strconv.Itoa(pct) + "%" + map[string]string{"Charging": "+", "Discharging": "-"}[state]
 }
 
 var BatteryFmt = func(bats []string) string {
-	return "β" + strings.Join(bats, "/")
+	return strings.Join(bats, "/")
 }
 
 var AudioFmt = func(vol int, muted bool) string {
@@ -69,11 +71,22 @@ var AudioFmt = func(vol int, muted bool) string {
 }
 
 var TimeFmt = func(t time.Time) string {
-	return t.Format("τ01/02-15:04")
+	return t.Format("02/01 15:04")
 }
 
 var StatusFmt = func(stats []string) string {
 	return " " + strings.Join(filterEmpty(stats), " ") + " "
+}
+
+var GetIp = func(dev string) (ip string) {
+	out, err := exec.Command("ip", "addr", "show", dev ).Output()
+	if err != nil {
+		return ip
+	}
+	if match := ipRE.FindSubmatch(out); len(match) >= 2 {
+		ip = string(match[1])
+	}
+	return ip
 }
 
 func wifiStatus(dev string) (string, int, int) {
@@ -98,7 +111,7 @@ func wifiStatus(dev string) (string, int, int) {
 	return ssid, bitrate, signal
 }
 
-func wiredStatus(dev string) int {
+func wiredStatus(dev string) (speed int) {
 	speed, err := sysfsIntVal(filepath.Join(netSysPath, dev, "speed"))
 	if err != nil {
 		return 0
@@ -108,20 +121,27 @@ func wiredStatus(dev string) int {
 
 func netDevStatus(dev string) string {
 	status, err := sysfsStringVal(filepath.Join(netSysPath, dev, "operstate"))
+	ip := GetIp(dev)
 	up := err == nil && status == "up"
 	if _, err = os.Stat(filepath.Join(netSysPath, dev, "wireless")); err == nil {
 		ssid, bitrate, signal := wifiStatus(dev)
-		return WifiFmt(dev, ssid, bitrate, signal, up)
+		return WifiFmt(dev, ssid, bitrate, signal, up, ip)
 	}
 	speed := wiredStatus(dev)
-	return WiredFmt(dev, speed, up)
+	return WiredFmt(dev, speed, up, ip)
 }
 
 func netStatus(devs ...string) statusFunc {
 	return func() string {
 		var netStats []string
-		for _, dev := range devs {
-			netStats = append(netStats, netDevStatus(dev))
+		for i, dev := range devs {
+			status := netDevStatus(dev)
+			if status == "" {continue}
+			if i == 0 {
+				netStats = append(netStats, status)
+				continue
+			}
+			netStats = append(netStats, "| " + status)
 		}
 		return NetFmt(netStats)
 	}
@@ -175,8 +195,12 @@ func timeStatus() string {
 
 func status() string {
 	var stats []string
-	for _, item := range Items {
-		stats = append(stats, item())
+	for i, item := range Items {
+		if i == 0 {
+			stats = append(stats, item())
+			continue
+		} 
+		stats = append(stats, "| " +item())
 	}
 	return StatusFmt(stats)
 }
