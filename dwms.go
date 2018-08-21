@@ -34,7 +34,7 @@ var (
 	bitrateRE = regexp.MustCompile(`tx bitrate:\s+(\d+)`)
 	signalRE  = regexp.MustCompile(`signal:\s+(-\d+)`)
 	ipRE      = regexp.MustCompile(`inet\s+([0-9.]+)`)
-	amixerRE  = regexp.MustCompile(`\[(\d+)%]\s*\[(\w+)]`)
+	amixerRE  = regexp.MustCompile(`\[(\d+)%]\s*\[(.*)]\s+\[(\w+)]`)
 	xconn     *xgb.Conn
 	xroot     xproto.Window
 )
@@ -43,7 +43,7 @@ var WifiFmt = func(dev, ssid string, bitrate, signal int, up bool, ip string) st
 	if !up {
 		return ""
 	}
-	return fmt.Sprintf("%s %ddBm %s", ssid, signal, ip)
+	return fmt.Sprintf("W: %s %ddBm %s", ssid, signal, ip)
 }
 
 var WiredFmt = func(dev string, speed int, up bool, ip string) string {
@@ -51,7 +51,7 @@ var WiredFmt = func(dev string, speed int, up bool, ip string) string {
 		return ""
 	}
 //	return "ε" + strconv.Itoa(speed)
-	return ip
+	return "E: + " + ip
 }
 
 var NetFmt = func(devs []string) string {
@@ -59,7 +59,7 @@ var NetFmt = func(devs []string) string {
 }
 
 var BatteryDevFmt = func(pct int, state string) string {
-	return strconv.Itoa(pct) + "%" + map[string]string{"Charging": "+", "Discharging": "-"}[state]
+	return "B: " + strconv.Itoa(pct) + "%" + map[string]string{"Charging": "+", "Discharging": "-"}[state]
 }
 
 var BatteryFmt = func(bats []string) string {
@@ -67,7 +67,10 @@ var BatteryFmt = func(bats []string) string {
 }
 
 var AudioFmt = func(vol int, muted bool) string {
-	return map[bool]string{false: "ν", true: "μ"}[muted] + strconv.Itoa(vol)
+	if muted {
+		return "S: M"
+	}
+	return "S: " + strconv.Itoa(vol) + "%"
 }
 
 var TimeFmt = func(t time.Time) string {
@@ -140,11 +143,13 @@ func netStatus(devs ...string) statusFunc {
 			if status == "" {
 				continue
 			}
-			if i == len - 1  {
-				netStats = append(netStats, status)
-				continue
+			if i != (len - 1)  {
+				if netDevStatus(devs[i + 1]) != "" {
+					netStats = append(netStats, status + " |")
+					continue
+				}
 			}
-			netStats = append(netStats, status + " |")
+			netStats = append(netStats, status)
 		}
 		return NetFmt(netStats)
 	}
@@ -187,7 +192,7 @@ func audioStatus(args ...string) statusFunc {
 		if err != nil {
 			return Unknown
 		}
-		muted := (string(match[2]) == "off")
+		muted := (string(match[3]) == "off")
 		return AudioFmt(vol, muted)
 	}
 }
