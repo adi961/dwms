@@ -134,14 +134,17 @@ func netDevStatus(dev string) string {
 func netStatus(devs ...string) statusFunc {
 	return func() string {
 		var netStats []string
+		len := len(devs)
 		for i, dev := range devs {
 			status := netDevStatus(dev)
-			if status == "" {continue}
-			if i == 0 {
+			if status == "" {
+				continue
+			}
+			if i == len - 1  {
 				netStats = append(netStats, status)
 				continue
 			}
-			netStats = append(netStats, "| " + status)
+			netStats = append(netStats, status + " |")
 		}
 		return NetFmt(netStats)
 	}
