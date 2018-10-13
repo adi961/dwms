@@ -6,7 +6,7 @@ import (
 
 const (
 	Unknown      = "?"
-	UpdatePeriod = 5 * time.Second
+	UpdatePeriod = 1 * time.Second
 )
 
 var Items = []statusFunc{

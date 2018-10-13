@@ -51,7 +51,7 @@ var WiredFmt = func(dev string, speed int, up bool, ip string) string {
 		return ""
 	}
 //	return "ε" + strconv.Itoa(speed)
-	return "E: + " + ip
+	return "E: " + ip
 }
 
 var NetFmt = func(devs []string) string {
@@ -70,7 +70,7 @@ var AudioFmt = func(vol int, muted bool) string {
 	if muted {
 		return "S: M"
 	}
-	return "S: " + strconv.Itoa(vol) + "%"
+	return "V: " + strconv.Itoa(vol) + "%"
 }
 
 var TimeFmt = func(t time.Time) string {
