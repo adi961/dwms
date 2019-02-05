@@ -5,13 +5,14 @@ import (
 )
 
 const (
-	Unknown      = "?"
-	UpdatePeriod = 1 * time.Second
+	Unknown         = "?"
+	UpdatePeriod    = 1 * time.Second
+	LowBatThreshold = 5
 )
 
 var Items = []statusFunc{
-	netStatus("wlan0", "enp0s31f6"),
-	batteryStatus("BAT0"),
+	netStatus("eno1", "enp1s0"),
+	//batteryStatus("BAT0"),
 	audioStatus(),
 	timeStatus,
 }

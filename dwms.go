@@ -18,6 +18,8 @@ import (
 	"syscall"
 	"time"
 
+	"github.com/mqu/go-notify"
+
 	"github.com/BurntSushi/xgb"
 	"github.com/BurntSushi/xgb/xproto"
 )
@@ -30,13 +32,14 @@ const (
 )
 
 var (
-	ssidRE    = regexp.MustCompile(`SSID:\s+(.*)`)
-	bitrateRE = regexp.MustCompile(`tx bitrate:\s+(\d+)`)
-	signalRE  = regexp.MustCompile(`signal:\s+(-\d+)`)
-	ipRE      = regexp.MustCompile(`inet\s+([0-9.]+)`)
-	amixerRE  = regexp.MustCompile(`\[(\d+)%]\s*\[(.*)]\s+\[(\w+)]`)
-	xconn     *xgb.Conn
-	xroot     xproto.Window
+	ssidRE     = regexp.MustCompile(`SSID:\s+(.*)`)
+	bitrateRE  = regexp.MustCompile(`tx bitrate:\s+(\d+)`)
+	signalRE   = regexp.MustCompile(`signal:\s+(-\d+)`)
+	ipRE       = regexp.MustCompile(`inet\s+([0-9.]+)`)
+	amixerRE   = regexp.MustCompile(`\[(\d+)%]\s*\[(.*)]\s+\[(\w+)]`)
+	xconn      *xgb.Conn
+	xroot      xproto.Window
+	hasAlerted = false
 )
 
 var WifiFmt = func(dev, ssid string, bitrate, signal int, up bool, ip string) string {
@@ -50,7 +53,7 @@ var WiredFmt = func(dev string, speed int, up bool, ip string) string {
 	if !up {
 		return ""
 	}
-//	return "ε" + strconv.Itoa(speed)
+	//	return "ε" + strconv.Itoa(speed)
 	return "E: " + ip
 }
 
@@ -82,7 +85,7 @@ var StatusFmt = func(stats []string) string {
 }
 
 var GetIp = func(dev string) (ip string) {
-	out, err := exec.Command("ip", "addr", "show", dev ).Output()
+	out, err := exec.Command("ip", "addr", "show", dev).Output()
 	if err != nil {
 		return ip
 	}
@@ -143,9 +146,9 @@ func netStatus(devs ...string) statusFunc {
 			if status == "" {
 				continue
 			}
-			if i != (len - 1)  {
-				if netDevStatus(devs[i + 1]) != "" {
-					netStats = append(netStats, status + " |")
+			if i != (len - 1) {
+				if netDevStatus(devs[i+1]) != "" {
+					netStats = append(netStats, status+" |")
 					continue
 				}
 			}
@@ -163,6 +166,16 @@ func batteryDevStatus(batt string) string {
 	status, err := sysfsStringVal(filepath.Join(battSysPath, batt, "status"))
 	if err != nil {
 		return Unknown
+	}
+	if status == "Charging" {
+		hasAlerted = false
+	}
+	if pct == LowBatThreshold && status == "Discharging" && !hasAlerted {
+
+		battAlert := notify.NotificationNew("Battery Alert!!!", fmt.Sprintf("%v%% battery left", pct), "battery")
+		battAlert.SetUrgency(notify.NOTIFY_URGENCY_CRITICAL)
+		battAlert.Show()
+		hasAlerted = true
 	}
 	return BatteryDevFmt(pct, status)
 }
@@ -207,8 +220,8 @@ func status() string {
 		if i == 0 {
 			stats = append(stats, item())
 			continue
-		} 
-		stats = append(stats, "| " +item())
+		}
+		stats = append(stats, "| "+item())
 	}
 	return StatusFmt(stats)
 }
@@ -249,6 +262,7 @@ func filterEmpty(strings []string) []string {
 }
 
 func run() {
+	notify.Init("System")
 	setStatus(status())
 	defer setStatus("") // cleanup
 	sigs := make(chan os.Signal, 1)
